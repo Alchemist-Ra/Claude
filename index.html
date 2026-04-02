@@ -1,10 +1,207 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Update Accounts</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 700px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f0f4f8;
+            color: #222;
+        }
+        h1 { color: #1F4E79; }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 16px 0;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+        .card h2 { margin: 0 0 8px 0; color: #1F4E79; }
+        .card p { margin: 4px 0; }
+        .instance {
+            background: #f8f9fa;
+            border-left: 4px solid #1F4E79;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .amount-input {
+            width: 100px;
+            padding: 4px 8px;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 4px;
+        }
+        .btn-post { background: #1F4E79; color: white; }
+        .btn-skip { background: #aaa; color: white; }
+        .btn-post:hover { background: #16375a; }
+        .btn-skip:hover { background: #888; }
+        .status { 
+            padding: 10px; 
+            border-radius: 4px; 
+            margin: 10px 0;
+            display: none;
+        }
+        .status.success { background: #d4edda; color: #155724; display: block; }
+        .status.error { background: #f8d7da; color: #721c24; display: block; }
+        #loading { text-align: center; color: #666; padding: 40px; }
+        #summary {
+            background: #1F4E79;
+            color: white;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+        }
+    </style>
 </head>
 <body>
     <h1>Update Accounts</h1>
-    <p>Loading...</p>
+    <div id="loading">Loading transaction queue...</div>
+    <div id="app" style="display:none">
+        <div id="summary"></div>
+        <div id="transactions"></div>
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        // ---- CONFIGURATION ----
+        const CLIENT_ID = '07178a53-0f43-49aa-bcbb-698ee200dae3';
+        const WORKBOOK_PATH = '/drives/b!QpSu3D1CkUmeN-goN0y2BcbO0aYU-A1LlQOgaushtVhSStMNoCIYR6dnm85fgMB0/items/0137FEOJ7PLBR5JPIPMJHZ5CIURLJBF56F';
+        // ----------------------
+
+        let accessToken = null;
+        let queue = [];
+
+        async function init() {
+            await authenticate();
+            await loadQueue();
+        }
+
+        async function authenticate() {
+            // MSAL lite - redirect flow
+            const params = new URLSearchParams(window.location.hash.substring(1));
+            if (params.get('access_token')) {
+                accessToken = params.get('access_token');
+                history.replaceState(null, '', window.location.pathname);
+                return;
+            }
+            const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize`
+                + `?client_id=${CLIENT_ID}`
+                + `&response_type=token`
+                + `&redirect_uri=${encodeURIComponent(window.location.href)}`
+                + `&scope=${encodeURIComponent('Files.ReadWrite')}`;
+            window.location.href = authUrl;
+        }
+
+        async function graphGet(url) {
+            const res = await fetch(`https://graph.microsoft.com/v1.0${url}`, {
+                headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            return res.json();
+        }
+
+        async function loadQueue() {
+            try {
+                const rows = await graphGet(`${WORKBOOK_PATH}:/workbook/tables/AppData/rows`);
+                const queueJson = rows.value[0]?.values[0][1];
+                if (!queueJson) {
+                    document.getElementById('loading').textContent = 'No transactions due. Check back later.';
+                    return;
+                }
+                queue = JSON.parse(queueJson);
+                renderQueue();
+            } catch(e) {
+                document.getElementById('loading').textContent = 'Error loading queue. Check configuration.';
+                console.error(e);
+            }
+        }
+
+        function renderQueue() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('app').style.display = 'block';
+
+            const total = queue.reduce((sum, t) => sum + t.instancesDue, 0);
+            document.getElementById('summary').innerHTML = 
+                `<strong>${queue.length}</strong> recurring payees &nbsp;|&nbsp; <strong>${total}</strong> transactions to review`;
+
+            const container = document.getElementById('transactions');
+            container.innerHTML = '';
+
+            queue.forEach((t, ti) => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `<h2>${t.payee}</h2>
+                    <p>${t.frequency} &nbsp;|&nbsp; Last posted: ${t.lastPosted}</p>
+                    <p><strong>${t.instancesDue} instance${t.instancesDue !== 1 ? 's' : ''} due</strong></p>`;
+
+                for (let i = 0; i < t.instancesDue; i++) {
+                    const instance = document.createElement('div');
+                    instance.className = 'instance';
+                    const date = calculateDate(t.lastPosted, t.frequency, i + 1);
+                    instance.innerHTML = `
+                        <p><strong>Date:</strong> ${date} &nbsp;
+                        <strong>Amount £</strong> <input class="amount-input" type="number" 
+                            step="0.01" value="${Math.abs(t.amount)}" id="amt_${ti}_${i}">
+                        </p>
+                        <button class="btn btn-post" onclick="postTransaction('${t.payee}', ${ti}, ${i}, '${date}', ${t.amount < 0 ? -1 : 1})">Post</button>
+                        <button class="btn btn-skip" onclick="skipTransaction(${ti}, ${i})">Skip</button>
+                        <span id="done_${ti}_${i}"></span>`;
+                    card.appendChild(instance);
+                }
+                container.appendChild(card);
+            });
+        }
+
+        function calculateDate(lastPosted, frequency, n) {
+            const d = new Date(lastPosted);
+            if (frequency === 'Weekly') {
+                d.setDate(d.getDate() + 7 * n);
+            } else if (frequency === 'Monthly') {
+                d.setMonth(d.getMonth() + n);
+            }
+            return d.toISOString().split('T')[0];
+        }
+
+        async function postTransaction(payee, ti, i, date, sign) {
+            const amt = parseFloat(document.getElementById(`amt_${ti}_${i}`).value) * sign;
+            const t = queue[ti];
+            const row = [[date, payee, '', '', amt, '', '', t.frequency === 'Weekly' ? 'Expense' : 'Expense', '', '', '']];
+            try {
+                await fetch(`https://graph.microsoft.com/v1.0${WORKBOOK_PATH}:/workbook/tables/Transactions/rows/add`, {
+                    method: 'POST',
+                    headers: { 
+                        Authorization: `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ values: row })
+                });
+                document.getElementById(`done_${ti}_${i}`).textContent = '✓ Posted';
+                document.getElementById(`done_${ti}_${i}`).style.color = 'green';
+            } catch(e) {
+                document.getElementById(`done_${ti}_${i}`).textContent = '✗ Failed';
+                document.getElementById(`done_${ti}_${i}`).style.color = 'red';
+            }
+        }
+
+        function skipTransaction(ti, i) {
+            document.getElementById(`done_${ti}_${i}`).textContent = '— Skipped';
+            document.getElementById(`done_${ti}_${i}`).style.color = '#aaa';
+        }
+
+        init();
+    </script>
 </body>
 </html>
