@@ -152,11 +152,11 @@
                     instance.className = 'instance';
                     const date = calculateDate(t.lastPosted, t.frequency, i + 1);
                     instance.innerHTML = `
-                        <p><strong>Date:</strong> ${date} &nbsp;
+                        <p><strong>Date:</strong> <input class="amount-input" type="date" value="${date}" id="dt_${ti}_${i}"> &nbsp;
                         <strong>Amount £</strong> <input class="amount-input" type="number" 
                             step="0.01" value="${Math.abs(t.amount)}" id="amt_${ti}_${i}">
                         </p>
-                        <button class="btn btn-post" onclick="postTransaction('${t.payee}', ${ti}, ${i}, '${date}', ${t.amount < 0 ? -1 : 1})">Post</button>
+                        <button class="btn btn-post" onclick="postTransaction('${t.payee}', ${ti}, ${i}, ${t.amount < 0 ? -1 : 1})">Post</button>
                         <button class="btn btn-skip" onclick="skipTransaction(${ti}, ${i})">Skip</button>
                         <span id="done_${ti}_${i}"></span>`;
                     card.appendChild(instance);
@@ -175,8 +175,9 @@
             return d.toISOString().split('T')[0];
         }
 
-        async function postTransaction(payee, ti, i, date, sign) {
+        async function postTransaction(payee, ti, i, sign) {
             const amt = parseFloat(document.getElementById(`amt_${ti}_${i}`).value) * sign;
+            const date = document.getElementById(`dt_${ti}_${i}`).value;
             const t = queue[ti];
             const row = [[date, payee, '', '', amt, '', '', t.frequency === 'Weekly' ? 'Expense' : 'Expense', '', '', '']];
             try {
