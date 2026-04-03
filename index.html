@@ -179,7 +179,8 @@
             const amt = parseFloat(document.getElementById(`amt_${ti}_${i}`).value) * sign;
             const date = document.getElementById(`dt_${ti}_${i}`).value;
             const t = queue[ti];
-            const row = [[date, payee, '', '', amt, '', '', t.frequency === 'Weekly' ? 'Expense' : 'Expense', '', '', '']];
+            const deductible = amt * (t.businessUse / 100);
+            const row = [[date, t.payee, t.description, '', amt, t.category, t.account, 'Expense', t.businessUse, '', deductible]];
             try {
                 await fetch(`https://graph.microsoft.com/v1.0${WORKBOOK_PATH}:/workbook/tables/Transactions/rows/add`, {
                     method: 'POST',
