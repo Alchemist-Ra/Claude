@@ -192,12 +192,25 @@
                 });
                 document.getElementById(`done_${ti}_${i}`).textContent = '✓ Posted';
                 document.getElementById(`done_${ti}_${i}`).style.color = 'green';
+                await updateLastPosted(t.rowIndex, date);
             } catch(e) {
                 document.getElementById(`done_${ti}_${i}`).textContent = '✗ Failed';
                 document.getElementById(`done_${ti}_${i}`).style.color = 'red';
             }
         }
 
+        async function updateLastPosted(rowIndex, date) {
+            const excelDate = Math.floor((new Date(date) - new Date('1899-12-30')) / 86400000);
+            await fetch(`https://graph.microsoft.com/v1.0${WORKBOOK_PATH}:/workbook/tables/RecurringHelper/rows/itemAt(index=${rowIndex})`, {
+                method: 'PATCH',
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ values: [[null, null, null, null, null, null, null, null, null, null, null, null, excelDate]] })
+            });
+        }
+        
         function skipTransaction(ti, i) {
             document.getElementById(`done_${ti}_${i}`).textContent = '— Skipped';
             document.getElementById(`done_${ti}_${i}`).style.color = '#aaa';
