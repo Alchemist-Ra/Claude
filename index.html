@@ -201,7 +201,7 @@
 
         async function updateLastPosted(rowIndex, date) {
             const excelDate = Math.floor((new Date(date) - new Date('1899-12-30')) / 86400000);
-            await fetch(`https://graph.microsoft.com/v1.0${WORKBOOK_PATH}:/workbook/tables/RecurringHelper/rows/itemAt(index=${rowIndex})`, {
+            await fetch(`https://graph.microsoft.com/v1.0${WORKBOOK_PATH}:/workbook/worksheets/Recurring Helper Table/range(address='M${rowIndex+2}')`, {
                 method: 'PATCH',
                 headers: {
                     Authorization: `Bearer ${accessToken}`,
